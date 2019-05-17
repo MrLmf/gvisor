@@ -582,7 +582,7 @@ func testV4ListenClose(t *testing.T, c *context.Context) {
 	const n = uint16(32)
 
 	// Start listening.
-	if err := c.EP.Listen(int(tcp.SynRcvdCountThreshold + 1)); err != nil {
+	if err := c.EP.Listen(int(n) + 1); err != nil {
 		t.Fatalf("Listen failed: %v", err)
 	}
 

@@ -92,6 +92,7 @@ type protocol struct {
 	congestionControl          string
 	availableCongestionControl []string
 	moderateReceiveBuffer      bool
+	dispatcher                 *dispatcher
 }
 
 // Number returns the tcp protocol number.
@@ -120,6 +121,14 @@ func (*protocol) MinimumPacketSize() int {
 func (*protocol) ParsePorts(v buffer.View) (src, dst uint16, err *tcpip.Error) {
 	h := header.TCP(v)
 	return h.SourcePort(), h.DestinationPort(), nil
+}
+
+// QueuePacket queues packets targeted at an endpoint after hashing the packet
+// to a specific processing queue. Each queue is serviced by its own processor
+// goroutine which is responsible for dequeuing and doing full TCP dispatch of
+// the packet.
+func (p *protocol) QueuePacket(r *stack.Route, ep stack.TransportEndpoint, id stack.TransportEndpointID, vv buffer.VectorisedView) {
+	p.dispatcher.queuePacket(r, ep, id, vv)
 }
 
 // HandleUnknownDestinationPacket handles packets targeted at this protocol but
@@ -254,6 +263,8 @@ func (p *protocol) Option(option interface{}) *tcpip.Error {
 	}
 }
 
+const numProcessors = 20
+
 func init() {
 	stack.RegisterTransportProtocolFactory(ProtocolName, func() stack.TransportProtocol {
 		return &protocol{
@@ -261,6 +272,7 @@ func init() {
 			recvBufferSize:             ReceiveBufferSizeOption{MinBufferSize, DefaultReceiveBufferSize, MaxBufferSize},
 			congestionControl:          ccReno,
 			availableCongestionControl: []string{ccReno, ccCubic},
+			dispatcher:                 newDispatcher(numProcessors),
 		}
 	})
 }

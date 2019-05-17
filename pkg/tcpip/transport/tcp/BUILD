@@ -15,6 +15,18 @@ go_template_instance(
     },
 )
 
+go_template_instance(
+    name = "tcp_segment_endpoint_list",
+    out = "tcp_segment_endpoint_list.go",
+    package = "tcp",
+    prefix = "segmentEndpoint",
+    template = "//pkg/ilist:generic_list",
+    types = {
+        "Element": "*segmentEndpoint",
+        "Linker": "*segmentEndpoint",
+    },
+)
+
 go_library(
     name = "tcp",
     srcs = [
@@ -22,6 +34,7 @@ go_library(
         "connect.go",
         "cubic.go",
         "cubic_state.go",
+        "dispatcher.go",
         "endpoint.go",
         "endpoint_state.go",
         "forwarder.go",
@@ -31,11 +44,13 @@ go_library(
         "sack.go",
         "sack_scoreboard.go",
         "segment.go",
+        "segment_endpoint_queue.go",
         "segment_heap.go",
         "segment_queue.go",
         "segment_state.go",
         "snd.go",
         "snd_state.go",
+        "tcp_segment_endpoint_list.go",
         "tcp_segment_list.go",
         "timer.go",
     ],
@@ -47,6 +62,7 @@ go_library(
         "//pkg/sleep",
         "//pkg/tcpip",
         "//pkg/tcpip/buffer",
+        "//pkg/tcpip/hash/jenkins",
         "//pkg/tcpip/header",
         "//pkg/tcpip/iptables",
         "//pkg/tcpip/seqnum",
@@ -61,6 +77,7 @@ go_library(
 filegroup(
     name = "autogen",
     srcs = [
+        "tcp_segment_endpoint_list.go",
         "tcp_segment_list.go",
     ],
     visibility = ["//:sandbox"],
