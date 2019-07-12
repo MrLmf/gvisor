@@ -36,6 +36,7 @@ go_test(
     size = "small",
     srcs = [
         "stack_test.go",
+        "transport_demuxer_test.go",
         "transport_test.go",
     ],
     deps = [
@@ -46,6 +47,9 @@ go_test(
         "//pkg/tcpip/iptables",
         "//pkg/tcpip/link/channel",
         "//pkg/tcpip/link/loopback",
+        "//pkg/tcpip/network/ipv4",
+        "//pkg/tcpip/network/ipv6",
+        "//pkg/tcpip/transport/udp",
         "//pkg/waiter",
     ],
 )

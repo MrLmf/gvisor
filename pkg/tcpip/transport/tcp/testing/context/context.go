@@ -154,7 +154,11 @@ func New(t *testing.T, mtu uint32) *Context {
 	if testing.Verbose() {
 		id = sniffer.New(id)
 	}
-	if err := s.CreateNIC(1, id); err != nil {
+	if err := s.CreateNamedNIC(1, "nic1", id); err != nil {
+		t.Fatalf("CreateNIC failed: %v", err)
+	}
+	id2, _ := channel.New(1000, mtu, "")
+	if err := s.CreateNamedNIC(2, "nic2", id2); err != nil {
 		t.Fatalf("CreateNIC failed: %v", err)
 	}
 
@@ -584,12 +588,8 @@ func (c *Context) Connect(iss seqnum.Value, rcvWnd seqnum.Size, options []byte) 
 	c.Port = tcpHdr.SourcePort()
 }
 
-// CreateConnectedWithRawOptions creates a connected TCP endpoint and sends
-// the specified option bytes as the Option field in the initial SYN packet.
-//
-// It also sets the receive buffer for the endpoint to the specified
-// value in epRcvBuf.
-func (c *Context) CreateConnectedWithRawOptions(iss seqnum.Value, rcvWnd seqnum.Size, epRcvBuf *tcpip.ReceiveBufferSizeOption, options []byte) {
+// Create creates a TCP endpoint.
+func (c *Context) Create(epRcvBuf *tcpip.ReceiveBufferSizeOption) {
 	// Create TCP endpoint.
 	var err *tcpip.Error
 	c.EP, err = c.s.NewEndpoint(tcp.ProtocolNumber, ipv4.ProtocolNumber, &c.WQ)
@@ -602,6 +602,15 @@ func (c *Context) CreateConnectedWithRawOptions(iss seqnum.Value, rcvWnd seqnum.
 			c.t.Fatalf("SetSockOpt failed failed: %v", err)
 		}
 	}
+}
+
+// CreateConnectedWithRawOptions creates a connected TCP endpoint and sends
+// the specified option bytes as the Option field in the initial SYN packet.
+//
+// It also sets the receive buffer for the endpoint to the specified
+// value in epRcvBuf.
+func (c *Context) CreateConnectedWithRawOptions(iss seqnum.Value, rcvWnd seqnum.Size, epRcvBuf *tcpip.ReceiveBufferSizeOption, options []byte) {
+	c.Create(epRcvBuf)
 	c.Connect(iss, rcvWnd, options)
 }
 
