@@ -143,6 +143,15 @@ func decSynRcvdCount() {
 	synRcvdCount.Unlock()
 }
 
+// synCookiesInUse() returns true if the synRcvdCount is greater than
+// SynRcvdCountThreshold.
+func synCookiesInUse() bool {
+	synRcvdCount.Lock()
+	v := synRcvdCount.value
+	synRcvdCount.Unlock()
+	return v >= SynRcvdCountThreshold
+}
+
 // newListenContext creates a new listen context.
 func newListenContext(stk *stack.Stack, listenEP *endpoint, rcvWnd seqnum.Size, v6only bool, netProto tcpip.NetworkProtocolNumber) *listenContext {
 	l := &listenContext{
@@ -443,6 +452,14 @@ func (e *endpoint) handleListenSegment(ctx *listenContext, s *segment) {
 			// the backlog has space.
 			e.stack.Stats().TCP.ListenOverflowAckDrop.Increment()
 			e.stack.Stats().DroppedPackets.Increment()
+			return
+		}
+
+		if !synCookiesInUse() {
+			// send a reset as this is an ACK for which there is no
+			// half open connections and we are not using cookies
+			// yet.
+			replyWithReset(s)
 			return
 		}
 
