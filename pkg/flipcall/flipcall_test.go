@@ -39,11 +39,11 @@ func newTestConnectionWithOptions(tb testing.TB, clientOpts, serverOpts []Endpoi
 		c.pwa.Destroy()
 		tb.Fatalf("PacketWindowAllocator.Allocate() failed: %v", err)
 	}
-	if err := c.clientEP.Init(pwd, clientOpts...); err != nil {
+	if err := c.clientEP.Init(ClientSide, pwd, clientOpts...); err != nil {
 		c.pwa.Destroy()
 		tb.Fatalf("failed to create client Endpoint: %v", err)
 	}
-	if err := c.serverEP.Init(pwd, serverOpts...); err != nil {
+	if err := c.serverEP.Init(ServerSide, pwd, serverOpts...); err != nil {
 		c.pwa.Destroy()
 		c.clientEP.Destroy()
 		tb.Fatalf("failed to create server Endpoint: %v", err)
@@ -105,7 +105,7 @@ func TestSendRecv(t *testing.T) {
 	testSendRecv(t, c)
 }
 
-func testShutdownConnect(t *testing.T, c *testConnection) {
+func testShutdownConnect(t *testing.T, c *testConnection, remoteShutdown bool) {
 	var clientRun sync.WaitGroup
 	clientRun.Add(1)
 	go func() {
@@ -115,17 +115,27 @@ func testShutdownConnect(t *testing.T, c *testConnection) {
 		}
 	}()
 	time.Sleep(time.Second) // to allow c.clientEP.Connect() to block
-	c.clientEP.Shutdown()
+	if remoteShutdown {
+		c.serverEP.Shutdown()
+	} else {
+		c.clientEP.Shutdown()
+	}
 	clientRun.Wait()
 }
 
-func TestShutdownConnect(t *testing.T) {
+func TestShutdownConnectLocal(t *testing.T) {
 	c := newTestConnection(t)
 	defer c.destroy()
-	testShutdownConnect(t, c)
+	testShutdownConnect(t, c, false)
 }
 
-func testShutdownRecvFirstBeforeConnect(t *testing.T, c *testConnection) {
+func TestShutdownConnectRemote(t *testing.T) {
+	c := newTestConnection(t)
+	defer c.destroy()
+	testShutdownConnect(t, c, true)
+}
+
+func testShutdownRecvFirstBeforeConnect(t *testing.T, c *testConnection, remoteShutdown bool) {
 	var serverRun sync.WaitGroup
 	serverRun.Add(1)
 	go func() {
@@ -136,17 +146,27 @@ func testShutdownRecvFirstBeforeConnect(t *testing.T, c *testConnection) {
 		}
 	}()
 	time.Sleep(time.Second) // to allow c.serverEP.RecvFirst() to block
-	c.serverEP.Shutdown()
+	if remoteShutdown {
+		c.clientEP.Shutdown()
+	} else {
+		c.serverEP.Shutdown()
+	}
 	serverRun.Wait()
 }
 
-func TestShutdownRecvFirstBeforeConnect(t *testing.T) {
+func TestShutdownRecvFirstBeforeConnectLocal(t *testing.T) {
 	c := newTestConnection(t)
 	defer c.destroy()
-	testShutdownRecvFirstBeforeConnect(t, c)
+	testShutdownRecvFirstBeforeConnect(t, c, false)
 }
 
-func testShutdownRecvFirstAfterConnect(t *testing.T, c *testConnection) {
+func TestShutdownRecvFirstBeforeConnectRemote(t *testing.T) {
+	c := newTestConnection(t)
+	defer c.destroy()
+	testShutdownRecvFirstBeforeConnect(t, c, true)
+}
+
+func testShutdownRecvFirstAfterConnect(t *testing.T, c *testConnection, remoteShutdown bool) {
 	var serverRun sync.WaitGroup
 	serverRun.Add(1)
 	go func() {
@@ -164,17 +184,27 @@ func testShutdownRecvFirstAfterConnect(t *testing.T, c *testConnection) {
 	if err := c.clientEP.Connect(); err != nil {
 		t.Fatalf("client Endpoint.Connect() failed: %v", err)
 	}
-	c.serverEP.Shutdown()
+	if remoteShutdown {
+		c.clientEP.Shutdown()
+	} else {
+		c.serverEP.Shutdown()
+	}
 	serverRun.Wait()
 }
 
-func TestShutdownRecvFirstAfterConnect(t *testing.T) {
+func TestShutdownRecvFirstAfterConnectLocal(t *testing.T) {
 	c := newTestConnection(t)
 	defer c.destroy()
-	testShutdownRecvFirstAfterConnect(t, c)
+	testShutdownRecvFirstAfterConnect(t, c, false)
 }
 
-func testShutdownSendRecv(t *testing.T, c *testConnection) {
+func TestShutdownRecvFirstAfterConnectRemote(t *testing.T) {
+	c := newTestConnection(t)
+	defer c.destroy()
+	testShutdownRecvFirstAfterConnect(t, c, true)
+}
+
+func testShutdownSendRecv(t *testing.T, c *testConnection, remoteShutdown bool) {
 	var serverRun sync.WaitGroup
 	serverRun.Add(1)
 	go func() {
@@ -199,14 +229,24 @@ func testShutdownSendRecv(t *testing.T, c *testConnection) {
 		t.Fatalf("client Endpoint.SendRecv() failed: %v", err)
 	}
 	time.Sleep(time.Second) // to allow serverEP.SendRecv() to block
-	c.serverEP.Shutdown()
+	if remoteShutdown {
+		c.clientEP.Shutdown()
+	} else {
+		c.serverEP.Shutdown()
+	}
 	serverRun.Wait()
 }
 
-func TestShutdownSendRecv(t *testing.T) {
+func TestShutdownSendRecvLocal(t *testing.T) {
 	c := newTestConnection(t)
 	defer c.destroy()
-	testShutdownSendRecv(t, c)
+	testShutdownSendRecv(t, c, false)
+}
+
+func TestShutdownSendRecvRemote(t *testing.T) {
+	c := newTestConnection(t)
+	defer c.destroy()
+	testShutdownSendRecv(t, c, true)
 }
 
 func benchmarkSendRecv(b *testing.B, c *testConnection) {
