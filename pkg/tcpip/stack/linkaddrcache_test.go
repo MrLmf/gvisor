@@ -17,6 +17,7 @@ package stack
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,20 +30,29 @@ type testaddr struct {
 	linkAddr tcpip.LinkAddress
 }
 
-var testaddrs []testaddr
+var testaddrs = func() []testaddr {
+	var testaddrs []testaddr
+	for i := 0; i < 4*linkAddrCacheSize; i++ {
+		addr := fmt.Sprintf("Addr%06d", i)
+		testaddrs = append(testaddrs, testaddr{
+			addr:     tcpip.FullAddress{NIC: 1, Addr: tcpip.Address(addr)},
+			linkAddr: tcpip.LinkAddress("Link" + addr),
+		})
+	}
+	return testaddrs
+}()
 
 type testLinkAddressResolver struct {
-	cache *linkAddrCache
-	delay time.Duration
+	cache                *linkAddrCache
+	delay                time.Duration
+	onLinkAddressRequest func()
 }
 
 func (r *testLinkAddressResolver) LinkAddressRequest(addr, _ tcpip.Address, _ LinkEndpoint) *tcpip.Error {
-	go func() {
-		if r.delay > 0 {
-			time.Sleep(r.delay)
-		}
-		r.fakeRequest(addr)
-	}()
+	time.AfterFunc(r.delay, func() { r.fakeRequest(addr) })
+	if f := r.onLinkAddressRequest; f != nil {
+		f()
+	}
 	return nil
 }
 
@@ -77,16 +87,6 @@ func getBlocking(c *linkAddrCache, addr tcpip.FullAddress, linkRes LinkAddressRe
 			return got, err
 		}
 		s.Fetch(true)
-	}
-}
-
-func init() {
-	for i := 0; i < 4*linkAddrCacheSize; i++ {
-		addr := fmt.Sprintf("Addr%06d", i)
-		testaddrs = append(testaddrs, testaddr{
-			addr:     tcpip.FullAddress{NIC: 1, Addr: tcpip.Address(addr)},
-			linkAddr: tcpip.LinkAddress("Link" + addr),
-		})
 	}
 }
 
@@ -220,6 +220,11 @@ func TestCacheResolutionFailed(t *testing.T) {
 	c := newLinkAddrCache(1<<63-1, 10*time.Millisecond, 5)
 	linkRes := &testLinkAddressResolver{cache: c}
 
+	var requestCount uint32
+	linkRes.onLinkAddressRequest = func() {
+		atomic.AddUint32(&requestCount, 1)
+	}
+
 	// First, sanity check that resolution is working...
 	e := testaddrs[0]
 	got, err := getBlocking(c, e.addr, linkRes)
@@ -230,9 +235,15 @@ func TestCacheResolutionFailed(t *testing.T) {
 		t.Errorf("c.get(%q)=%q, want %q", string(e.addr.Addr), got, e.linkAddr)
 	}
 
+	before := atomic.LoadUint32(&requestCount)
+
 	e.addr.Addr += "2"
 	if _, err := getBlocking(c, e.addr, linkRes); err != tcpip.ErrNoLinkAddress {
 		t.Errorf("c.get(%q), got error: %v, want: error ErrNoLinkAddress", string(e.addr.Addr), err)
+	}
+
+	if got, want := int(atomic.LoadUint32(&requestCount)-before), c.resolutionAttempts; got != want {
+		t.Errorf("got link address request count = %d, want = %d", got, want)
 	}
 }
 

@@ -487,6 +487,13 @@ func (n *NIC) leaveGroup(addr tcpip.Address) *tcpip.Error {
 	return nil
 }
 
+func handlePacket(protocol tcpip.NetworkProtocolNumber, dst, src tcpip.Address, localLinkAddr, remotelinkAddr tcpip.LinkAddress, ref *referencedNetworkEndpoint, vv buffer.VectorisedView) {
+	r := makeRoute(protocol, dst, src, localLinkAddr, ref, false /* handleLocal */, false /* multicastLoop */)
+	r.RemoteLinkAddress = remotelinkAddr
+	ref.ep.HandlePacket(&r, vv)
+	ref.decRef()
+}
+
 // DeliverNetworkPacket finds the appropriate network protocol endpoint and
 // hands the packet over for further processing. This function is called when
 // the NIC receives a packet from the physical interface.
@@ -514,6 +521,8 @@ func (n *NIC) DeliverNetworkPacket(linkEP LinkEndpoint, remote, _ tcpip.LinkAddr
 
 	src, dst := netProto.ParseAddresses(vv.First())
 
+	n.stack.AddLinkAddress(n.id, src, remote)
+
 	// If the packet is destined to the IPv4 Broadcast address, then make a
 	// route to each IPv4 network endpoint and let each endpoint handle the
 	// packet.
@@ -522,10 +531,7 @@ func (n *NIC) DeliverNetworkPacket(linkEP LinkEndpoint, remote, _ tcpip.LinkAddr
 		n.mu.RLock()
 		for _, ref := range n.endpoints {
 			if ref.protocol == header.IPv4ProtocolNumber && ref.tryIncRef() {
-				r := makeRoute(protocol, dst, src, linkEP.LinkAddress(), ref, false /* handleLocal */, false /* multicastLoop */)
-				r.RemoteLinkAddress = remote
-				ref.ep.HandlePacket(&r, vv)
-				ref.decRef()
+				handlePacket(protocol, dst, src, linkEP.LinkAddress(), remote, ref, vv)
 			}
 		}
 		n.mu.RUnlock()
@@ -533,10 +539,7 @@ func (n *NIC) DeliverNetworkPacket(linkEP LinkEndpoint, remote, _ tcpip.LinkAddr
 	}
 
 	if ref := n.getRef(protocol, dst); ref != nil {
-		r := makeRoute(protocol, dst, src, linkEP.LinkAddress(), ref, false /* handleLocal */, false /* multicastLoop */)
-		r.RemoteLinkAddress = remote
-		ref.ep.HandlePacket(&r, vv)
-		ref.decRef()
+		handlePacket(protocol, dst, src, linkEP.LinkAddress(), remote, ref, vv)
 		return
 	}
 
