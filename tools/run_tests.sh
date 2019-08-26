@@ -176,7 +176,6 @@ run_docker_tests() {
   bazel test \
     "${BAZEL_BUILD_FLAGS[@]}" \
     --test_env=RUNSC_RUNTIME="" \
-    --test_output=all \
     //runsc/test/image:image_test
 
   # These names are used to exclude tests not supported in certain
@@ -188,9 +187,7 @@ run_docker_tests() {
   bazel test \
     "${BAZEL_BUILD_FLAGS[@]}" \
     --test_env=RUNSC_RUNTIME="${RUNTIME}" \
-    --test_output=all \
     --nocache_test_results \
-    --test_output=streamed \
     //runsc/test/integration:integration_test \
     //runsc/test/integration:integration_test_hostnet \
     //runsc/test/integration:integration_test_overlay \
@@ -259,6 +256,10 @@ finish() {
 
 # Run bazel in a docker container
 build_in_docker() {
+  # We need to upload all the existing test logs and artifacts before shutting
+  # down and cleaning bazel, otherwise all test information is lost.
+  upload_test_artifacts
+
   cd ${WORKSPACE_DIR}
   bazel clean
   bazel shutdown
